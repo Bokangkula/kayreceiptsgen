@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Receipt Maker</title>
+  <!-- html2pdf.js for converting receipt to PDF offline -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    :root {
+      --primary: #2C4653;
+      --accent: #E76F51;
+      --light-bg: #f4f6f8;
+      --card-bg: #ffffff;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--light-bg);
+      margin: 0;
+      padding: 12px;
+      color: #333;
+    }
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+    h2, h3 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+    label {
+      font-size: 12px;
+      font-weight: bold;
+      color: #666;
+      display: block;
+      margin-top: 8px;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 4px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+    .item-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    .item-row input[type="text"] { flex: 2; }
+    .item-row input[type="number"] { flex: 1; }
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+    .btn-remove { background: #ff4d4d; color: #fff; padding: 10px; width: auto; font-size: 12px; margin-top: 4px; }
+    .btn-group {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-group .btn { flex: 1; }
+
+    /* Receipt Layout for Preview/Export */
+    #receipt-template {
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 8px;
+      font-family: 'Courier New', Courier, monospace;
+      color: #000;
+      border: 1px dashed #ccc;
+    }
+    .receipt-header {
+      text-align: center;
+      border-bottom: 2px dashed #000;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    .receipt-header img {
+      max-height: 50px;
+      margin-bottom: 5px;
+    }
+    .receipt-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .receipt-table th {
+      border-bottom: 1px solid #000;
+      text-align: left;
+      padding: 4px 0;
+    }
+    .receipt-table td {
+      padding: 6px 0;
+    }
+    .receipt-total {
+      border-top: 2px dashed #000;
+      margin-top: 10px;
+      padding-top: 10px;
+      text-align: right;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .receipt-footer {
+      text-align: center;
+      margin-top: 15px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- FORM CARD -->
+  <div class="card">
+    <h2>📄 Issue Receipt</h2>
+    
+    <label>Customer Name</label>
+    <input type="text" id="custName" placeholder="e.g. John Smith">
+    
+    <label>Customer Phone / WhatsApp</label>
+    <input type="tel" id="custPhone" placeholder="e.g. +26771234567">
+
+    <h3>Items</h3>
+    <div id="itemsContainer">
+      <div class="item-row">
+        <input type="text" placeholder="Description" class="item-desc">
+        <input type="number" placeholder="Qty" class="item-qty" value="1" oninput="calculateTotal()">
+        <input type="number" placeholder="Price (P)" class="item-price" step="0.01" oninput="calculateTotal()">
+      </div>
+    </div>
+    
+    <button class="btn btn-outline" onclick="addItemRow()">+ Add Another Item</button>
+
+    <div style="margin-top: 15px; font-weight: bold; text-align: right; font-size: 18px;">
+      Total: P<span id="grandTotal">0.00</span>
+    </div>
+  </div>
+
+  <!-- RECEIPT PREVIEW CARD -->
+  <div class="card">
+    <h3>Live Receipt Preview</h3>
+    
+    <div id="receipt-template">
+      <div class="receipt-header">
+        <div id="logoContainer"></div>
+        <strong id="bizNameDisplay">KAYWORLD VISUALS</strong><br>
+        <span id="bizContactDisplay">Gaborone West Phase 2 • +267 72 453 612</span><br>
+        <small id="receiptNoDisplay">Receipt #: KV-1001</small><br>
+        <small id="receiptDateDisplay"></small>
+      </div>
+
+      <div>
+        <strong>Bill To:</strong> <span id="previewCustName">Valued Customer</span>
+      </div>
+
+      <table class="receipt-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th style="text-align: center;">Qty</th>
+            <th style="text-align: right;">Amount</th>
+          </tr>
+        </thead>
+        <tbody id="previewItems">
+          <tr>
+            <td colspan="3" style="text-align: center; color: #888;">No items added yet</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="receipt-total">
+        TOTAL: P<span id="previewTotal">0.00</span>
+      </div>
+
+      <div class="receipt-footer">
+        Thank you for your business!<br>
+        <em>Generated 100% offline</em>
+      </div>
+    </div>
+
+    <!-- ACTION BUTTONS -->
+    <div class="btn-group" style="margin-top: 15px;">
+      <button class="btn btn-accent" onclick="downloadPDF()">📥 Download</button>
+      <button class="btn btn-primary" onclick="shareNative()">📤 Share</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Default Configuration for Test Run
+  let config = {
+    businessName: "KAYWORLD VISUALS",
+    phone: "+267 72 453 612",
+    prefix: "KV-",
+    nextNumber: 1001
+  };
+
+  // Set today's date
+  document.getElementById('receiptDateDisplay').innerText = new Date().toLocaleDateString('en-GB');
+
+  function addItemRow() {
+    const container = document.getElementById('itemsContainer');
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <input type="text" placeholder="Description" class="item-desc" oninput="calculateTotal()">
+      <input type="number" placeholder="Qty" class="item-qty" value="1" oninput="calculateTotal()">
+      <input type="number" placeholder="Price (P)" class="item-price" step="0.01" oninput="calculateTotal()">
+      <button class="btn btn-remove" onclick="this.parentElement.remove(); calculateTotal();">X</button>
+    `;
+    container.appendChild(row);
+  }
+
+  function calculateTotal() {
+    const descs = document.getElementsByClassName('item-desc');
+    const qtys = document.getElementsByClassName('item-qty');
+    const prices = document.getElementsByClassName('item-price');
+    const custName = document.getElementById('custName').value;
+
+    document.getElementById('previewCustName').innerText = custName || "Valued Customer";
+
+    let grandTotal = 0;
+    let previewHTML = '';
+
+    for (let i = 0; i < descs.length; i++) {
+      const desc = descs[i].value || 'Item/Service';
+      const qty = parseFloat(qtys[i].value) || 0;
+      const price = parseFloat(prices[i].value) || 0;
+      const lineTotal = qty * price;
+
+      grandTotal += lineTotal;
+
+      previewHTML += `
+        <tr>
+          <td>${desc}</td>
+          <td style="text-align: center;">${qty}</td>
+          <td style="text
